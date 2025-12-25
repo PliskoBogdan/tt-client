@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,53 +17,18 @@ import {
 
 import { useDeviceId } from "../hooks/useDeviceId";
 import { api } from "./src/api/api";
+import { useSnackbar } from './src/providers/SnackbarProvider';
 
-// Моковые данные для демонстрации
-const mockTodos = [
-  {
-    "_id": "694c1b38d231224144d93d2a",
-    "deviceId": "123",
-    "text": "для распечатки образцов. Lorem Ipsum не только успешно пережил без заметных изменений пять веков, но и перешагнул в электронный дизайн. Его популяризации в новое время послужили публикация листов Letraset",
-    "source": "voice",
-    "completed": false,
-    "createdAt": "2025-12-24T16:56:24.023Z",
-    "updatedAt": "2025-12-24T16:56:24.023Z",
-    "__v": 0
-},
-  {
-    "_id": "353242",
-    "deviceId": "123",
-    "text": "Lorem Ipsum - это текст-рыба, часто используемый в печати и вэб-дизайне. Lorem Ipsum является стандартной рыбой для текстов на латинице с начала XVI века. В то время некий безымянный печатник создал большую коллекцию размеров и форм шрифтов, используя Lorem Ipsum",
-    "source": "voice",
-    "completed": false,
-    "createdAt": "2025-12-24T16:56:24.023Z",
-    "updatedAt": "2025-12-24T16:56:24.023Z",
-    "__v": 0
-},
-  {
-    "_id": "3532fd42",
-    "deviceId": "123",
-    "text": "Привет, это заметка номер 123 из содержимым текстовым",
-    "source": "photo",
-    "completed": false,
-    "createdAt": "2025-12-24T16:56:24.023Z",
-    "updatedAt": "2025-12-24T16:56:24.023Z",
-    "__v": 0
-}
-];
-
-const STORAGE_KEY = '@todos_storage';
 
 export default function App() {
+  const snackbar = useSnackbar();
   const deviceId = useDeviceId();
-  const params = useLocalSearchParams();
 
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedTodo, setSelectedTodo] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // Симуляция загрузки данных с API
   useEffect(() => {
     fetchTodos();
   }, []);
@@ -79,16 +44,8 @@ export default function App() {
       setLoading(true);
       const { data } = await api.get(`/todos?deviceId=${deviceId}`);
 
-      console.log('datals', data.items)
-
-      // Здесь должен быть реальный API запрос
-      // const response = await fetch('YOUR_API_ENDPOINT');
-      // const data = await response.json();
-      
-      // Симуляция задержки API
       setTimeout(() => {
         setTodos(data.items);
-        // setTodos(mockTodos);
         setLoading(false);
       }, 1000);
     } catch (error) {
@@ -97,36 +54,27 @@ export default function App() {
     }
   };
 
-  const toggleTodoStatus = (id) => {
-    setTodos(todos.map(todo => 
-      todo.id === id 
-        ? { ...todo, status: todo.status === 'active' ? 'completed' : 'active' }
-        : todo
-    ));
-  };
-
   const deleteTodo = (id) => {
     Alert.alert(
-      'Удалить задачу',
-      'Вы уверены, что хотите удалить эту задачу?',
+      'Видалити замітку',
+      'Ви впевнені, що хочете видалити цю замітку?',
       [
-        { text: 'Отмена', style: 'cancel' },
+        { text: 'Скасування', style: 'cancel' },
         { 
-          text: 'Удалить', 
+          text: 'Видалити', 
           style: 'destructive',
-          onPress: () => {
-            setTodos(todos.filter(todo => todo.id !== id));
-            setModalVisible(false);
+          onPress: async () => {
+            try {
+              await api.delete(`/todos/${id}`);
+              setTodos(todos.filter(({ _id }) => _id !== id));
+              setModalVisible(false);
+              snackbar.success('Замітку було успішно видалено');
+            } catch (error) {
+              console.error(`Error when delete todo id-${id}`, error);
+            }
           }
         }
       ]
-    );
-  };
-
-  const createVoiceTodo = () => {
-    Alert.alert(
-      'Голосовой ввод', 
-      'Для реализации используйте:\n• expo-av для записи аудио\n• Speech-to-text API для распознавания'
     );
   };
 
@@ -170,7 +118,7 @@ export default function App() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#6C5CE7" />
-        <Text style={styles.loadingText}>Загрузка задач...</Text>
+        <Text style={styles.loadingText}>Завантаження заміток...</Text>
       </View>
     );
   }
@@ -180,10 +128,10 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Мои заметки1</Text>
+        <Text style={styles.headerTitle}>Мої замітки</Text>
         <View style={styles.statsContainer}>
           <Text style={styles.statsText}>
-            {todos.filter(t => !t.completed).length} активных
+            {todos.filter(t => !t.completed).length} активних
           </Text>
         </View>
       </View>
@@ -196,8 +144,8 @@ export default function App() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Feather name="check-circle" size={64} color="#DDD" />
-            <Text style={styles.emptyText}>Нет задач</Text>
-            <Text style={styles.emptySubtext}>Создайте первую задачу</Text>
+            <Text style={styles.emptyText}>Немає заміток</Text>
+            <Text style={styles.emptySubtext}>Створіть першу замітку</Text>
           </View>
         }
       />
@@ -230,7 +178,7 @@ export default function App() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Детали заметки</Text>
+              <Text style={styles.modalTitle}>Деталі замітки</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Feather name="x" size={24} color="#333" />
               </TouchableOpacity>
@@ -239,20 +187,20 @@ export default function App() {
             {selectedTodo && (
               <ScrollView style={styles.modalBody}>
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalLabel}>Описание</Text>
+                  <Text style={styles.modalLabel}>Опис</Text>
                   <Text style={styles.modalText}>{selectedTodo.text}</Text>
                 </View>
 
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalLabel}>Тип создания</Text>
+                  <Text style={styles.modalLabel}>Тип замітки</Text>
                   <View style={styles.typeRow}>
                     <Feather 
-                      name={selectedTodo.type === 'voice' ? 'mic' : selectedTodo.type === 'photo' ? 'image' : 'edit-3'} 
+                      name={selectedTodo.source === 'voice' ? 'mic' : selectedTodo.source === 'photo' ? 'image' : 'edit-3'} 
                       size={16} 
                       color="#666" 
                     />
                     <Text style={styles.typeText}>
-                      {selectedTodo.type === 'voice' ? 'Голосом' : selectedTodo.type === 'photo' ? 'Из фото' : 'Текст'}
+                      {selectedTodo.source === 'voice' ? 'Голосом' : selectedTodo.source === 'photo' ? 'Из фото' : 'Текст'}
                     </Text>
                   </View>
                 </View>
@@ -260,11 +208,11 @@ export default function App() {
                 <View style={styles.modalActions}>
                   <TouchableOpacity 
                     style={[styles.modalButton, styles.deleteButton]}
-                    onPress={() => deleteTodo(selectedTodo.id)}
+                    onPress={() => deleteTodo(selectedTodo._id)}
                   >
                     <Feather name="trash-2" size={20} color="#FF6B6B" />
                     <Text style={[styles.buttonText, styles.deleteButtonText]}>
-                      Удалить
+                      Видилити
                     </Text>
                   </TouchableOpacity>
                 </View>
