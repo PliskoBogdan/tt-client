@@ -1,50 +1,430 @@
-import { Camera } from "expo-camera";
-import { useEffect, useRef, useState } from "react";
-import { Button, StyleSheet, Text, View } from "react-native";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as ImagePicker from "expo-image-picker";
+import React, { useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import constants from "../constants";
 import { useDeviceId } from "../hooks/useDeviceId";
+import { api } from "./src/api/api";
 
-let MlkitOcr;
-try {
-  MlkitOcr = require("react-native-mlkit-ocr");
-} catch {
-  MlkitOcr = { detectFromUri: async () => [] }; // заглушка
-}
+const { GOOGLE_CLOUD_VISION_ENDPOINT } = constants;
+const { width } = Dimensions.get("window");
 
 export default function CameraScreen() {
-  const cameraRef = useRef(null);
-  const [permission, setPermission] = useState(null);
-  const [photo, setPhoto] = useState(null);
   const deviceId = useDeviceId();
 
-  useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setPermission(status === "granted");
-    })();
-  }, []);
+  const cameraRef = useRef(null);
+  const [permission, requestPermission] = useCameraPermissions();
 
-  if (permission === null) return <Text>Запрашиваем разрешения...</Text>;
-  if (permission === false) return <Text>Нет доступа к камере</Text>;
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [recognizedText, setRecognizedText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+
+  const recognizeTextFromImage = async (imageUri) => {
+
+    try {
+      const manipResult = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+
+      if (!manipResult.base64) {
+        throw new Error('Не вдалося отримати base64 зображення');
+      }
+
+      const response = await fetch(
+        GOOGLE_CLOUD_VISION_ENDPOINT,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            requests: [
+              {
+                image: {
+                  content: manipResult.base64,
+                },
+                features: [
+                  {
+                    type: 'TEXT_DETECTION',
+                    maxResults: 1,
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      );
+
+      const result = await response.json();
+      
+      if (result.responses && result.responses[0].textAnnotations) {
+        const detectedText = result.responses[0].textAnnotations[0].description;
+        return detectedText;
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Error recognizing text:', error);
+      throw error;
+    }
+  };
+  const sendTextToAPI = async (text) => {
+    try {
+      setIsSending(true);
+
+      await api.post(`/todos`, {
+        deviceId,
+        text,
+        source: "photo",
+      });
+
+      Alert.alert("Успіх", "Текст успішно збережено");
+    } catch (error) {
+      console.error("Error sending to API:", error);
+      Alert.alert("Ошибка", "Не вдалося зберегти текст");
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const takePhoto = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || isProcessing) return;
 
-    const pic = await cameraRef.current.takePictureAsync();
-    setPhoto(pic);
+    try {
+      setIsProcessing(true);
+      setRecognizedText("");
 
-    // OCR (заглушка для Expo Go)
-    const result = await MlkitOcr.detectFromUri(pic.uri);
-    const text = result.map((b) => b.text).join(" ");
-    console.log("Detected text:", text);
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.8,
+      });
+
+      const detectedText = await recognizeTextFromImage(photo.uri);
+
+      if (detectedText && detectedText.trim().length > 0) {
+        setRecognizedText(detectedText);
+        console.log("Recognized text:", detectedText);
+        await sendTextToAPI(detectedText);
+      } else {
+        Alert.alert("Увага", "Текст на зображенні не виявлено");
+      }
+    } catch (error) {
+      console.error("Error processing photo:", error);
+      Alert.alert("Помилка", "Сталася помилка під час обробки фотографії");
+    } finally {
+      setIsProcessing(false);
+    }
   };
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: "images",
+        quality: 0.8,
+        allowsEditing: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setIsProcessing(true);
+        setRecognizedText("");
+
+        const detectedText = await recognizeTextFromImage(result.assets[0].uri);
+
+        if (detectedText && detectedText.trim().length > 0) {
+          setRecognizedText(detectedText);
+          await sendTextToAPI(detectedText);
+        } else {
+          Alert.alert("Увага", "Текст на зображенні не виявлено");
+        }
+
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      setIsProcessing(false);
+    }
+  };
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#000',
+    },
+    camera: {
+      flex: 1,
+    },
+    overlay: {
+      flex: 1,
+      backgroundColor: 'transparent',
+    },
+    topBar: {
+      paddingTop: Platform.OS === 'ios' ? 60 : 40,
+      paddingHorizontal: 20,
+      paddingBottom: 20,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: 'bold',
+      color: '#FFF',
+      marginBottom: 8,
+    },
+    subtitle: {
+      fontSize: 15,
+      color: '#FFF',
+      opacity: 0.9,
+    },
+    middleSection: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 40,
+    },
+    focusFrame: {
+      width: width - 80,
+      height: 200,
+      position: 'relative',
+    },
+    corner: {
+      position: 'absolute',
+      width: 35,
+      height: 35,
+      borderColor: '#00D9FF',
+    },
+    topLeft: {
+      top: 0,
+      left: 0,
+      borderTopWidth: 5,
+      borderLeftWidth: 5,
+      borderTopLeftRadius: 4,
+    },
+    topRight: {
+      top: 0,
+      right: 0,
+      borderTopWidth: 5,
+      borderRightWidth: 5,
+      borderTopRightRadius: 4,
+    },
+    bottomLeft: {
+      bottom: 0,
+      left: 0,
+      borderBottomWidth: 5,
+      borderLeftWidth: 5,
+      borderBottomLeftRadius: 4,
+    },
+    bottomRight: {
+      bottom: 0,
+      right: 0,
+      borderBottomWidth: 5,
+      borderRightWidth: 5,
+      borderBottomRightRadius: 4,
+    },
+    resultContainer: {
+      marginHorizontal: 20,
+      marginBottom: 20,
+      padding: 18,
+      backgroundColor: 'rgba(0, 217, 255, 0.15)',
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: 'rgba(0, 217, 255, 0.4)',
+    },
+    resultLabel: {
+      fontSize: 13,
+      color: '#00D9FF',
+      marginBottom: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    resultText: {
+      fontSize: 15,
+      color: '#FFF',
+      lineHeight: 22,
+    },
+    bottomBar: {
+      paddingBottom: Platform.OS === 'ios' ? 50 : 30,
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+      paddingTop: 20,
+    },
+    buttonRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      width: width - 40,
+    },
+    captureButton: {
+      width: 85,
+      height: 85,
+      borderRadius: 42.5,
+      backgroundColor: 'rgba(0, 217, 255, 0.3)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 5,
+      borderColor: '#00D9FF',
+    },
+    captureButtonDisabled: {
+      opacity: 0.4,
+    },
+    captureButtonInner: {
+      width: 65,
+      height: 65,
+      borderRadius: 32.5,
+      backgroundColor: '#00D9FF',
+    },
+    galleryButton: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: 'rgba(255, 255, 255, 0.3)',
+    },
+    galleryButtonText: {
+      fontSize: 28,
+    },
+    processingText: {
+      marginTop: 18,
+      fontSize: 16,
+      color: '#00D9FF',
+      fontWeight: '700',
+    },
+    permissionContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 30,
+    },
+    permissionText: {
+      fontSize: 19,
+      color: '#FFF',
+      textAlign: 'center',
+      marginBottom: 30,
+      lineHeight: 28,
+    },
+    permissionButton: {
+      backgroundColor: '#00D9FF',
+      paddingHorizontal: 35,
+      paddingVertical: 16,
+      borderRadius: 14,
+      elevation: 4,
+      shadowColor: '#00D9FF',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+    },
+    permissionButtonText: {
+      color: '#000',
+      fontSize: 17,
+      fontWeight: '700',
+    },
+  });
+
+  if (!permission) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.permissionContainer}>
+          <Text style={styles.permissionText}>
+          Необхідний доступ до камери для розпізнавання тексту
+          </Text>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={requestPermission}
+          >
+            <Text style={styles.permissionButtonText}>Надати доступ</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <Button title="Сделать фото" onPress={takePhoto} />
+      <CameraView ref={cameraRef} style={styles.camera} facing="back">
+        <View style={styles.overlay}>
+          <View style={styles.topBar}>
+            <Text style={styles.title}>📸 Розпізнавання тексту</Text>
+            <Text style={styles.subtitle}>
+              Наведіть на текст і натисніть кнопку
+            </Text>
+          </View>
+
+          <View style={styles.middleSection}>
+            <View style={styles.focusFrame}>
+              <View style={[styles.corner, styles.topLeft]} />
+              <View style={[styles.corner, styles.topRight]} />
+              <View style={[styles.corner, styles.bottomLeft]} />
+              <View style={[styles.corner, styles.bottomRight]} />
+            </View>
+          </View>
+
+          {recognizedText.length > 0 && (
+            <View style={styles.resultContainer}>
+              <Text style={styles.resultLabel}>✓ Розпізнаний текст:</Text>
+              <Text style={styles.resultText} numberOfLines={4}>
+                {recognizedText}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.bottomBar}>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.galleryButton}
+                onPress={pickImage}
+                disabled={isProcessing || isSending}
+              >
+                <Text style={styles.galleryButtonText}>📁</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.captureButton,
+                  (isProcessing || isSending) && styles.captureButtonDisabled,
+                ]}
+                onPress={takePhoto}
+                disabled={isProcessing || isSending}
+                activeOpacity={0.7}
+              >
+                {isProcessing || isSending ? (
+                  <ActivityIndicator size="large" color="#FFF" />
+                ) : (
+                  <View style={styles.captureButtonInner} />
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.galleryButton} />
+            </View>
+
+            {(isProcessing || isSending) && (
+              <Text style={styles.processingText}>
+                {isProcessing ? "🔍 Розпізнавання..." : "📤 Відправлення..."}
+              </Text>
+            )}
+          </View>
+        </View>
+      </CameraView>
     </View>
   );
-}
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-});
+  
+}

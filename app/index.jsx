@@ -153,7 +153,7 @@ export default function App() {
       <View style={styles.fabContainer}>
         <TouchableOpacity 
           style={[styles.fab, styles.fabSecondary]}
-          onPress={createPhotoTodo}
+          onPress={() => router.push("/camera")}
           activeOpacity={0.8}
         >
           <Feather name="camera" size={24} color="#fff" />
