@@ -208,7 +208,7 @@ export default function VoiceScreen() {
       {recording && (
         <View style={{ alignItems: 'center', marginTop: 20 }}>
           <Text style={{ fontSize: 16 }}>
-            🎙 Запись...
+            🎙 Запис...
           </Text>
           <Text style={{ 
             fontSize: 32, 
@@ -224,8 +224,7 @@ export default function VoiceScreen() {
         </View>
       )}
       <Text style={{ textAlign: "center", marginTop: 20, fontSize: 16 }}>
-        {recording ? "🎙 запис..." : ""}
-        {isProcessing ? "⏳ Обрабка..." : ""}
+        {isProcessing ? "⏳ Обробка..." : ""}
       </Text>
     </View>
   );

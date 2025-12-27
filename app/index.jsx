@@ -78,13 +78,6 @@ export default function App() {
     );
   };
 
-  const createPhotoTodo = () => {
-    Alert.alert(
-      'Создание из фото', 
-      'Для реализации используйте:\n• expo-image-picker для выбора фото\n• OCR API (Google Vision, AWS Textract) для распознавания текста'
-    );
-  };
-
   const openTodoDetail = (todo) => {
     setSelectedTodo(todo);
     setModalVisible(true);
@@ -140,7 +133,7 @@ export default function App() {
         data={todos}
         renderItem={renderTodoItem}
         keyExtractor={item => item._id}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[styles.listContainer, todos.length === 0 && styles.emptyListContainer]}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Feather name="check-circle" size={64} color="#DDD" />
@@ -168,7 +161,6 @@ export default function App() {
         </TouchableOpacity>
       </View>
 
-      {/* Modal для просмотра деталей */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -266,6 +258,11 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 100,
   },
+  emptyListContainer: {
+  flexGrow: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
   todoItem: {
     backgroundColor: '#fff',
     borderRadius: 16,
