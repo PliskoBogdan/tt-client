@@ -28,6 +28,7 @@ export default function CameraScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [recognizedText, setRecognizedText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [facing, setFacing] = useState("back");
 
   const recognizeTextFromImage = async (imageUri) => {
 
@@ -155,6 +156,16 @@ export default function CameraScreen() {
       setIsProcessing(false);
     }
   };
+
+  const changeFacing = () => {
+    if (facing === 'back') {
+      setFacing('front');
+      return;
+    }
+
+    setFacing('back')
+  }
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -164,8 +175,9 @@ export default function CameraScreen() {
       flex: 1,
     },
     overlay: {
-      flex: 1,
+      ...StyleSheet.absoluteFillObject, // Добавьте это
       backgroundColor: 'transparent',
+      flex: 1,
     },
     topBar: {
       paddingTop: Platform.OS === 'ios' ? 60 : 40,
@@ -359,70 +371,73 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      <CameraView ref={cameraRef} style={styles.camera} facing="back">
-        <View style={styles.overlay}>
-          <View style={styles.topBar}>
-            <Text style={styles.title}>📸 Розпізнавання тексту</Text>
-            <Text style={styles.subtitle}>
-              Наведіть на текст і натисніть кнопку
-            </Text>
-          </View>
-
-          <View style={styles.middleSection}>
-            <View style={styles.focusFrame}>
-              <View style={[styles.corner, styles.topLeft]} />
-              <View style={[styles.corner, styles.topRight]} />
-              <View style={[styles.corner, styles.bottomLeft]} />
-              <View style={[styles.corner, styles.bottomRight]} />
-            </View>
-          </View>
-
-          {recognizedText.length > 0 && (
-            <View style={styles.resultContainer}>
-              <Text style={styles.resultLabel}>✓ Розпізнаний текст:</Text>
-              <Text style={styles.resultText} numberOfLines={4}>
-                {recognizedText}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.bottomBar}>
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={styles.galleryButton}
-                onPress={pickImage}
-                disabled={isProcessing || isSending}
-              >
-                <Text style={styles.galleryButtonText}>📁</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.captureButton,
-                  (isProcessing || isSending) && styles.captureButtonDisabled,
-                ]}
-                onPress={takePhoto}
-                disabled={isProcessing || isSending}
-                activeOpacity={0.7}
-              >
-                {isProcessing || isSending ? (
-                  <ActivityIndicator size="large" color="#FFF" />
-                ) : (
-                  <View style={styles.captureButtonInner} />
-                )}
-              </TouchableOpacity>
-
-              <View style={styles.galleryButton} />
-            </View>
-
-            {(isProcessing || isSending) && (
-              <Text style={styles.processingText}>
-                {isProcessing ? "🔍 Розпізнавання..." : "📤 Відправлення..."}
-              </Text>
-            )}
+      <CameraView ref={cameraRef} style={styles.camera} facing={facing} />
+      
+      {/* Overlay вынесен за пределы CameraView */}
+      <View style={styles.overlay}>
+        <View style={styles.topBar}>
+          <Text style={styles.title}>📸 Розпізнавання тексту</Text>
+          <Text style={styles.subtitle}>
+            Наведіть на текст і натисніть кнопку
+          </Text>
+        </View>
+  
+        <View style={styles.middleSection}>
+          <View style={styles.focusFrame}>
+            <View style={[styles.corner, styles.topLeft]} />
+            <View style={[styles.corner, styles.topRight]} />
+            <View style={[styles.corner, styles.bottomLeft]} />
+            <View style={[styles.corner, styles.bottomRight]} />
           </View>
         </View>
-      </CameraView>
+  
+        {recognizedText.length > 0 && (
+          <View style={styles.resultContainer}>
+            <Text style={styles.resultLabel}>✓ Розпізнаний текст:</Text>
+            <Text style={styles.resultText} numberOfLines={4}>
+              {recognizedText}
+            </Text>
+          </View>
+        )}
+  
+        <View style={styles.bottomBar}>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={styles.galleryButton}
+              onPress={pickImage}
+              disabled={isProcessing || isSending}
+            >
+              <Text style={styles.galleryButtonText}>📁</Text>
+            </TouchableOpacity>
+  
+            <TouchableOpacity
+              style={[
+                styles.captureButton,
+                (isProcessing || isSending) && styles.captureButtonDisabled,
+              ]}
+              onPress={takePhoto}
+              disabled={isProcessing || isSending}
+              activeOpacity={0.7}
+            >
+              {isProcessing || isSending ? (
+                <ActivityIndicator size="large" color="#FFF" />
+              ) : (
+                <View style={styles.captureButtonInner} />
+              )}
+            </TouchableOpacity>
+              
+            <TouchableOpacity activeOpacity={0.7} onPress={changeFacing}>
+              <View style={styles.galleryButton} />
+            </TouchableOpacity>
+          </View>
+  
+          {(isProcessing || isSending) && (
+            <Text style={styles.processingText}>
+              {isProcessing ? "🔍 Розпізнавання..." : "📤 Відправлення..."}
+            </Text>
+          )}
+        </View>
+      </View>
     </View>
   );
 }
