@@ -1,5 +1,5 @@
+import { recognizeText } from "@infinitered/react-native-mlkit-text-recognition";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from "expo-image-picker";
 import React, { useRef, useState } from "react";
 import {
@@ -12,11 +12,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import constants from "../constants";
 import { useDeviceId } from "../hooks/useDeviceId";
 import { api } from "./src/api/api";
 
-const { GOOGLE_CLOUD_VISION_ENDPOINT } = constants;
 const { width } = Dimensions.get("window");
 
 export default function CameraScreen() {
@@ -33,53 +31,13 @@ export default function CameraScreen() {
   const recognizeTextFromImage = async (imageUri) => {
 
     try {
-      const manipResult = await ImageManipulator.manipulateAsync(
-        imageUri,
-        [{ resize: { width: 1024 } }],
-        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      );
-
-      if (!manipResult.base64) {
-        throw new Error('Не вдалося отримати base64 зображення');
-      }
-
-      const response = await fetch(
-        GOOGLE_CLOUD_VISION_ENDPOINT,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            requests: [
-              {
-                image: {
-                  content: manipResult.base64,
-                },
-                features: [
-                  {
-                    type: 'TEXT_DETECTION',
-                    maxResults: 1,
-                  },
-                ],
-              },
-            ],
-          }),
-        }
-      );
-
-      const result = await response.json();
-      
-      if (result.responses && result.responses[0].textAnnotations) {
-        const detectedText = result.responses[0].textAnnotations[0].description;
-        return detectedText;
-      } else {
-        return null;
-      }
+      const { text } = await recognizeText(imageUri);
+      console.log('ettwtw',text)
+      return text
     } catch (error) {
-      console.error('Error recognizing text:', error);
-      throw error;
+      console.error("Error recognizing text:", error);
     }
+
   };
   const sendTextToAPI = async (text) => {
     try {
